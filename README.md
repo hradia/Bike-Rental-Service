@@ -1,5 +1,6 @@
 # Bike-Rental-Service
 Predictive modeling project for MA 575
+Coding Language: R
 
 Introduction
 The success and availability of bike sharing services depends highly on the usage of such services. Bikes must be available when and 
@@ -24,3 +25,5 @@ does it hold on both weekdays and weekends?
 -	Look into correlation between variables (collinearity)
 -	Run regression with all variables separately - see which have higher p-values
 -	Variable selection (automatic or manual)
+
+
