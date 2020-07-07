@@ -1,0 +1,309 @@
+---
+title: "Deliverable 4"
+author: 'Group 5: Kristina Yamkovoy, Zhixing Zhao, Yueyang Zhang, Xueying He, Hernisha
+  Radia'
+date: "December 9th, 2019"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+#Abstract
+
+Bike rental services have increased dramatically in the last ten years, making the process to rent a bike even more seamless than before with the introduction of new technology. Now, a bike can be rented through an app at a specific location and dropped off at a different location while minimizing cost to the user which increases the popularity of such services. As bike usage increases, the need to identify what parameters are affecting rental counts needs to be analyzed. Using these parameters, as well as rental data from 2011, a case study was created to predict daily rental counts in 2012. By creating a scatterplot matrix, it can be seen that the following independent variables are significant to include in the model: month, weekday, temperature, windspeed, and humidity. After using a quadratic transformation, clear patterns emerge showing an overlap between the training and the validation data, which leads to the conclusion that the model to predict bike rental rates in 2012 was successful.   
+
+
+#Introduction
+
+In major cities, rental bikes can be found on every street corner. The rental providers understood the customers need for mass availability, easy rental process, and reasonable prices which is why bike rentals have increased. While understanding the customers needs are important, it is also important to use data that is provided to notice trends and create models that help analyze these trends for future use. 
+
+	There are many different parameters that factor into bike rental counts: type of user, time of day, time of week, weather and holidays. To analyze daily rental counts in 2012, it is important to notice if there are increased rental counts during the weekdays rather than weekends, and if so does it have anything to do with the time of day that have the most rentals. While analyzing these covariates, it is important to connect it to the type of user renting the bikes, whether they are registered or casual users. The two types of users could have different trends depending on time of day and week which is important for the rental provider to know in order to create the most accurate model for daily rental counts in 2012. Weather can also have an impact on bike rentals and want to see what type of weather affects both casual and registered rental users or is there a specific range of weather affects rentals. For the last covariate, holidays, it is important to notice if all holidays have a decreased rental count from all users or does it depend on the specific holiday. 
+
+	After noticing all of the parameters that factor into bike rental counts, the next steps of this case study are to understand which parameters have a concrete effect. Once this is established, training and validation are used from the 2011 data set in order to create a reliable model to predict bike rental counts in 2012. 
+
+
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(ggcorrplot)
+library(modelr)
+library(tidyr)
+library(dplyr)
+library(MASS)
+dat <- read.csv("rental_data.csv")
+``` 
+
+We begin by creating the training dataset, which contains data from only 2011. The data from 2012 will be used for validation. Variable selection is done using only the data from 2011. 
+
+```{r}
+train = dat[dat$yr == 0, ]
+
+pairs(~cnt+season+mnth+holiday+weekday+workingday+weathersit+temp+atemp+windspeed+hum, data = train)
+```
+
+While many of the variables are clearly correlated with the count of bikes rented, there is also collinearity between the independent variables. This collinearity can be visualized using a correlation matrix.
+
+```{r}
+var1 <- c("cnt", "season", "mnth", "weekday", "workingday", "weathersit", "temp", "atemp", "hum", "windspeed")
+bike2 <- dat[var1]
+corr <- round(cor(bike2), 3)
+p.mat <- cor_pmat(bike2)
+par(mfrow=c(2,2))
+ggcorrplot(corr) + ggtitle("Correlation Matrix") + theme(plot.title = element_text(hjust= 0.5, size = 15, face = "bold"))
+ggcorrplot(p.mat) + ggtitle("P-values") + theme(plot.title = element_text(hjust= 0.5, size = 15, face = "bold"))
+```
+
+From the correlation matrix, it is clear that the following independent variables are highly related: season and month, weather situation (weathersit) and humiditiy, temperature and ambient temperature (atemp - the "feeling" temperature), temperature and season, temperature and month, ambient temperature and season and month.
+
+Based on the scatterplot matrix, correlation matrix, and preexisting knowledge on weather, the following independent variables are chosen to include in the model:
+1. month - highly correlated with season, however month provides more information, there are only four seasons versus twelve months, so using month can lead to a more accurate prediction, but may also lead to overfitting.
+2. weekday or workingday - both variables appear to have a relationship with count, however whether or not a day is a working day depends highly on what day of the week it is, so only one of these two variables should be selected.
+3. temperature
+4. windspeed
+5. humidity
+
+Ambient temperature, which is the temperature that one feels, depends on the air temperature and other factors such as windspeed and humidity. Because this variable is a composite of others, using it to predict the count for the following year could lead to more variability and thus more error in the prediction, so it is better to use temperature, windspeed, and humidity seperately. Likewise, weather situation depends on the same variables, and the weather on a specific day one year cannot be predicted using the weather from that day the previous year.
+
+
+```{r}
+pairs(~cnt+mnth+weekday+temp+windspeed+hum, data = train, main = "Variables for Consideration")
+```
+
+Next, we fit the linear regression model using the selected variables without an transformation.
+
+```{r}
+mfit <- lm(cnt ~weekday + temp + windspeed + hum , data = train)
+summary(mfit)
+```
+
+All of the variables selected have significant p-values below 0.05 except for weekday, which will be removed from the model.
+
+```{r}
+mfit2 <- lm(cnt ~ temp + windspeed + hum , data = train)
+summary(mfit2)
+```
+
+However, not all of these variables are linearly related to count and must be transformed.
+
+Count and temperature appear to follow a quadratic relationship, and using a quadratic transform clearly helps.
+
+```{r}
+m1 = lm(cnt ~ temp, data = train)
+m2 = lm(cnt ~ temp + I(temp^2), data = train)
+par(mfrow=c(1,2))
+plot(train$temp, train$cnt, xlab = "Temperature", ylab = "Count", main = "Count vs. Temperature")
+temp1 = seq(0, 1, by = 0.01)
+lines(temp1, predict(m1, newdata=data.frame(temp = temp1)), col="red", lwd = 2)
+lines(temp1, predict(m2, newdata=data.frame(temp = temp1)), col="blue", lwd = 2)
+legend(0.05, 6000, legend=c("OLS", "Quad LS"), col=c("red", "blue"), lty=1, cex=0.6)
+
+plot(train$temp, rstandard(m2), xlab = 'Temperature', ylab = 'Standardized Residuals')
+abline(h = -1, lty=2)
+abline(h = 1, lty=2)
+```
+For both month and temperature, using quadratic least squares helps to get the residuals closer to being normally distributed.
+
+
+When considering windspeed, at first glance the residuals appear to be normally distributed, however there are more point clustered above y = 0 than below. Weighted least squares may help with this issue.
+```{r}
+m1 = lm(cnt ~ windspeed, data = train)
+par(mfrow=c(1,2))
+plot(train$windspeed, train$cnt, xlab = "Windspeed", ylab = "Count", main = "Count vs. Windspeed")
+temp1 = seq(0, 1, by = 0.01)
+lines(temp1, predict(m1, newdata=data.frame(windspeed = temp1)), col="red", lwd = 2)
+
+# plot residuals
+plot(train$windspeed, rstandard(m1), xlab = "Windspeed", ylab = "Standardized Residuals")
+```
+
+When regressing count on humidity using simple linear regression, it becomes clear that the regression line is almost perfectly horizontal, meaning that humidity does not have an impact on count, so it can be left out of the model, even though it had a significant p-value in the initial multivariate model.
+```{r}
+m1 = lm(cnt ~ hum, data = train)
+par(mfrow=c(1,2))
+plot(train$hum, train$cnt, xlab = "Humidity", ylab = "Count", main = "Count vs. Humidity")
+temp1 = seq(0, 1, by = 0.01)
+lines(temp1, predict(m1, newdata=data.frame(hum = temp1)), col="red", lwd = 2)
+
+# plot residuals
+plot(train$hum, rstandard(m1), xlab = "Humidity", ylab = "Standaridized Residuals")
+```
+
+
+The final model is:
+```{r}
+mod = lm(cnt ~ temp + I(temp^2) + windspeed, data = train)
+summary(mod)
+
+```
+
+
+## Diagnostic
+```{r}
+StanResMLS <- rstandard(mod)
+par(mfrow=c(2,1))
+q1 <- qqnorm(StanResMLS, plot.it = FALSE)
+plot(range(q1$x, q1$x), range(q1$y, q1$y), ylab = "Standardized Residuals", xlab = "Theoretical Quantiles" )
+points(q1)
+points(q1,col="blue", pch = 19, cex = 0.5)
+qqline(StanResMLS,lty = 2)
+legend(2, 0, legend=c("MLS"), col=c("blue"), lty=0, cex=1, pch=19)
+hist(StanResMLS,100)
+```
+
+The qq-plot shown above is tailed from the left which can be testified in the residuals' histogram --- the distribution is a little bit left skewed. Since the data size is sufficiently large, here we can assume it follows a normal distribution. The slight left-skewedness would not have a large effect.
+
+## Validation
+```{r}
+# Residuals for validation data
+res_t <- resid(mod)
+valid <- dat[dat$yr == 1, ]
+output<- predict(mod, se.fit = TRUE, newdata=data.frame(mnth=valid$mnth, temp=valid$temp, windspeed=valid$windspeed))
+res_v <- valid$cnt - output$fit
+# Plot residuals
+par(mfrow=c(1,1))
+plot(train$cnt, res_t,xlab="Count", ylab="Residuals",xlim=c(0,9000), ylim=c(min(res_t,res_v),max(res_t,res_v)),  col=c("blue"), lty=0, cex=1, pch=19)
+points(valid$cnt,res_v,xlab="Count", ylab="Residuals",xlim=c(0,9000),col="red", lty=0, cex=1, pch=19)
+legend(7000, 1.75, legend=c("Training","Validation"), col=c("blue","red"), lty=0, cex=1, pch=19)
+
+plot(output$fit,valid$cnt)
+plot(output$fit,ylim=c(0,9500), xlim=c(0,365),xlab="Day", ylab="Counts", col="blue", pch=19)
+legend(-15, 9000, legend=c("Training","Validation"), col=c("blue","red"), lty=0, cex=1, pch=19, bty="n")
+points(valid$cnt,col="red", pch=19)
+# Relative Mean Square Error for validation data
+mean((res_v)^2) / mean((valid$cnt)^2)
+```
+
+The graph shows a general increasing trend on the number of bike rentals in the validation dataset. The merged residual plot clearly shows an overlapping pattern between points in blue which are the residuals from the training data and points in red which are the residuals from the validation data. However, as counts increase, the residuals also increase. This is due to the year effects that cannot be captured from our training dataset which contains data from only one year. One of the main reason of this increase might be the increase in the popularity in bike sharing as time proceed which brings more users and cause the increase in both residuals and the counts. Thus, we considered further improve our model by separate out counts into casual users and registered users to see if one of them can be successfully predicted.
+
+But still, our model has been very successful in predicting the trend and the value despite the general increasing in count. It validates the accuracy of the multiple regression model we have which cotains temperature, temperature square, and windspeed as independent variables. The computed relative mean square error is 0.162, a figure close to the perfect fit for the model which is 0.
+
+# Look at registered and casual seperately now
+```{r}
+# registered
+mod<- lm(registered ~ temp + I(temp^2) + windspeed, data = train)
+summary(mod)
+
+StanResMLS <- rstandard(mod)
+par(mfrow=c(2,1))
+q1 <- qqnorm(StanResMLS, plot.it = FALSE)
+plot(range(q1$x, q1$x), range(q1$y, q1$y), ylab = "Standardized Residuals", xlab = "Theoretical Quantiles" )
+points(q1)
+points(q1,col="blue", pch = 19, cex = 0.5)
+qqline(StanResMLS,lty = 2)
+legend(2, 0, legend=c("MLS"), col=c("blue"), lty=0, cex=1, pch=19)
+hist(StanResMLS,100)
+
+# Residuals for validation data
+res_t <- resid(mod)
+valid <- dat[dat$yr == 1, ]
+output<- predict(mod, se.fit = TRUE, newdata=data.frame(mnth=valid$mnth, temp=valid$temp, windspeed=valid$windspeed))
+res_v <- valid$registered - output$fit
+# Plot residuals
+par(mfrow=c(1,1))
+plot(train$registered, res_t,xlab="Count", ylab="Residuals",xlim=c(0,7200), ylim=c(min(res_t,res_v),max(res_t,res_v)),  col=c("blue"), lty=0, cex=1, pch=19)
+points(valid$registered,res_v,xlab="Count", ylab="Residuals",xlim=c(0,9000),col="red", lty=0, cex=1, pch=19)
+legend(5500, 1.75, legend=c("Training","Validation"), col=c("blue","red"), lty=0, cex=1, pch=19)
+
+plot(output$fit,valid$registered)
+plot(output$fit,ylim=c(0,9500), xlim=c(0,365),xlab="Day", ylab="Counts", col="blue", pch=19)
+legend(-15, 9000, legend=c("Training","Validation"), col=c("blue","red"), lty=0, cex=1, pch=19, bty="n")
+points(valid$registered,col="red", pch=19)
+# Relative Mean Square Error for validation data
+mean((res_v)^2) / mean((valid$registered)^2)
+```
+
+
+```{r}
+# casual
+mod<- lm(casual ~ temp + I(temp^2) + windspeed, data = train)
+summary(mod)
+
+StanResMLS <- rstandard(mod)
+par(mfrow=c(2,1))
+q1 <- qqnorm(StanResMLS, plot.it = FALSE)
+plot(range(q1$x, q1$x), range(q1$y, q1$y), ylab = "Standardized Residuals", xlab = "Theoretical Quantiles" )
+points(q1)
+points(q1,col="blue", pch = 19, cex = 0.5)
+qqline(StanResMLS,lty = 2)
+legend(2, 0, legend=c("MLS"), col=c("blue"), lty=0, cex=1, pch=19)
+hist(StanResMLS,100)
+
+# Residuals for validation data
+res_t <- resid(mod)
+valid <- dat[dat$yr == 1, ]
+output<- predict(mod, se.fit = TRUE, newdata=data.frame(mnth=valid$mnth, temp=valid$temp, windspeed=valid$windspeed))
+res_v <- valid$casual - output$fit
+# Plot residuals
+par(mfrow=c(1,1))
+plot(train$casual, res_t,xlab="Count", ylab="Residuals",xlim=c(0,4000), ylim=c(min(res_t,res_v),max(res_t,res_v)),  col=c("blue"), lty=0, cex=1, pch=19)
+points(valid$casual,res_v,xlab="Count", ylab="Residuals",xlim=c(0,9000),col="red", lty=0, cex=1, pch=19)
+legend(3000, 1.75, legend=c("Training","Validation"), col=c("blue","red"), lty=0, cex=1, pch=19)
+
+plot(output$fit,valid$casual)
+plot(output$fit,ylim=c(-1000,4000), xlim=c(0,365),xlab="Day", ylab="Counts", col="blue", pch=19)
+legend(-15, 4000, legend=c("Training","Validation"), col=c("blue","red"), lty=0, cex=1, pch=19, bty="n")
+points(valid$casual,col="red", pch=19)
+# Relative Mean Square Error for validation data
+mean((res_v)^2) / mean((valid$casual)^2)
+```
+
+After seperate the data into casual users and registered users, we trained the fitted model and valid it with the same method. As shown above, for registered users, the model performs similiar as it did when we use total count as our independent variable. There is still an uncaptured year increment. It has a greater RMSE value of 0.183. As for causual users, although the graph shows that the the model predicts the value well since there are many overlappings, the RMSE value actually become a lot more greater with a value of 0.308. Thus, the method of separate the users into causal and registered might not be very efficient. Then, we decide to try to examine the proportion of users per day over total for years.
+
+# NOW MODEL PROPORTION OF USERS PER DAY (USERS PER DAY OVER TOTAL FOR YEAR)
+```{r}
+year_0_total = sum(dat$cnt[dat$yr == 0])
+year_1_total = sum(dat$cnt[dat$yr == 1])
+
+year_total = c(rep(year_0_total, 365), rep(year_1_total , 366))
+dat$year_total = year_total
+
+# get the proportion of users for that day
+dat$cnt_prop = dat$cnt / dat$year_total
+
+train = dat[dat$yr == 0, ]
+
+pairs(~cnt_prop+mnth+weekday+temp+windspeed+hum, data = train)
+```
+
+It looks like for count proportion, we can use the same model.
+
+```{r}
+mod<- lm(cnt_prop ~ temp + I(temp^2) + windspeed, data = train)
+summary(mod)
+
+StanResMLS <- rstandard(mod)
+par(mfrow=c(2,1))
+q1 <- qqnorm(StanResMLS, plot.it = FALSE)
+plot(range(q1$x, q1$x), range(q1$y, q1$y), ylab = "Standardized Residuals", xlab = "Theoretical Quantiles" )
+points(q1)
+points(q1,col="blue", pch = 19, cex = 0.5)
+qqline(StanResMLS,lty = 2)
+legend(2, 0, legend=c("MLS"), col=c("blue"), lty=0, cex=1, pch=19)
+hist(StanResMLS,100)
+
+# Residuals for validation data
+res_t <- resid(mod)
+valid <- dat[dat$yr == 1, ]
+output<- predict(mod, se.fit = TRUE, newdata=data.frame(mnth=valid$mnth, temp=valid$temp, windspeed=valid$windspeed))
+res_v <- valid$cnt_prop - output$fit
+# Plot residuals
+par(mfrow=c(1,1))
+plot(train$cnt_prop, res_t,xlab="Count Proportion", ylab="Residuals",xlim=c(0,0.005), ylim=c(min(res_t,res_v),max(res_t,res_v)),  col=c("blue"), lty=0, cex=1, pch=19)
+points(valid$cnt_prop,res_v,xlab="Count Proportion", ylab="Residuals",xlim=c(0,0.005),col="red", lty=0, cex=1, pch=19)
+legend(0.0038, -0.001, legend=c("Training","Validation"), col=c("blue","red"), lty=0, cex=1, pch=19)
+
+plot(output$fit,valid$cnt_prop)
+plot(output$fit,ylim=c(-0.0005,0.0045), xlim=c(0,365),xlab="Day", ylab="Counts", col="blue", pch=19)
+legend(-15, 0.0045, legend=c("Training","Validation"), col=c("blue","red"), lty=0, cex=1, pch=19, bty="n")
+points(valid$cnt_prop,col="red", pch=19)
+# Relative Mean Square Error for validation data
+mean((res_v)^2) / mean((valid$cnt_prop)^2)
+```
+
+From the outputs, we can see that our best-fit model trained with training dataset has a great number of overlaps. Also, the RMSE value drops rapidly to 0.04. They proves that the model we have successfully predicts the value from validation dataset. We can use this model to predict the proportion of the bike users per day over the total count of the whole year.
+
+#Discussion
+
+In conclusion, we would say that our final model which takes the proportion of the bike users per day is very success in the validating process. The model predicts both the trend and the value with RMSE value 0.04 which is very close to perfect. Also, with current model, we do not need to consider the year increment since, while using the proportion,the year increment has already been taken into account. But still, if we want to know the value of the year increment, we need to have more data and maybe more factor to be able to predicted the exact value of the yearly increase. Furthermore, although the model can almost predict what future most-likely to be with given parameters, there are uncertainties and there might exist new factors that has not been previously included in our model. Thus, we need to keep improving our model.
+
+
