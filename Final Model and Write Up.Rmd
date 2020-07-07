@@ -1,8 +1,5 @@
 ---
-title: "Deliverable 4"
-author: 'Group 5: Kristina Yamkovoy, Zhixing Zhao, Yueyang Zhang, Xueying He, Hernisha
-  Radia'
-date: "December 9th, 2019"
+title: "Final Code and Write Up"
 output:
   word_document: default
   html_document: default
